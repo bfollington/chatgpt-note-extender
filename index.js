@@ -103,6 +103,52 @@ function extendTitles() {
   ask(query);
 }
 
+function argueAgainst() {
+  // select random file in folder
+  const files = getAllNoteFilenames();
+  const randomFile = files[Math.floor(Math.random() * files.length)];
+  const note = readNoteBody(randomFile);
+
+  if (note.length < 5) {
+    console.warn("Note too short, skipping");
+    return;
+  }
+
+  const query = `
+  The following is a note from an author's personal notebook. The title is on the first line and ends with the suffix .subtext, the remainder of the document is the body:
+
+  ${randomFile}
+  ${note}
+
+  Argue against this note as if you were the author, commenting on perspectives they may have missed. If there is no good argument to make respond with 'All good bruv.' instead.
+  `;
+
+  ask(query);
+}
+
+function suggestNextNote() {
+  // select random file in folder
+  const files = getAllNoteFilenames();
+  const randomFile = files[Math.floor(Math.random() * files.length)];
+  const note = readNoteBody(randomFile);
+
+  if (note.length < 5) {
+    console.warn("Note too short, skipping");
+    return;
+  }
+
+  const query = `
+  The following is a note from an author's personal notebook. The title is on the first line and ends with the suffix .subtext, the remainder of the document is the body:
+
+  ${randomFile}
+  ${note}
+
+  Suggest the title for a note that continues this train of thought, feel free to be as imaginative as possible.
+  `;
+
+  ask(query);
+}
+
 function rewordNote() {
   // select random file in folder
   const files = getAllNoteFilenames();
