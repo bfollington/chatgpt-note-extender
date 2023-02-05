@@ -14,28 +14,78 @@ async function ask(query) {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
+  console.log(query);
+  console.log("---");
   const res = await api.sendMessage(query);
   console.log(res.text);
 }
 
+// CONSTANTS
+
+const NOTES_FOLDER = "./notes";
+const SUFFIX = ".subtext";
+const EMBEDDINGS = "embeddings.json";
+const EMBEDDING_MODEL = "text-embedding-ada-002";
+
+// HELPERS
+
 function getAllNoteFilenames() {
-  return fs.readdirSync("./notes").filter((f) => f.endsWith(".subtext"));
+  return fs.readdirSync(NOTES_FOLDER).filter((f) => f.endsWith(SUFFIX));
 }
 
 function getAllNoteTitles() {
   const files = getAllNoteFilenames();
-  return files.map((f) => f.replace(".subtext", ""));
+  return files.map((f) => f.replace(SUFFIX, ""));
 }
 
 function readNoteBody(filename) {
-  const text = fs.readFileSync(`./notes/${filename}`, "utf-8");
+  const text = fs.readFileSync(`${NOTES_FOLDER}/${filename}`, "utf-8");
   const note = processNote(text);
   return note;
 }
 
+function formatName(filename) {
+  return filename.replace(SUFFIX, "").replace(/-/g, " ");
+}
+
+function processNote(note) {
+  const lines = note.split(/[\r\n]+/);
+  // remove all lines with a colon
+  const filtered = lines.filter((line) => !line.includes(":"));
+  // return joined list
+  return filtered.join("\n");
+}
+
+function loadCachedEmbeddings() {
+  try {
+    const data = fs.readFileSync(EMBEDDINGS);
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+// https://stackoverflow.com/a/57363600
+function cosinesim(A, B) {
+  let dotproduct = 0;
+  let mA = 0;
+  let mB = 0;
+  for (let i = 0; i < A.length; i++) {
+    // here you missed the i++
+    dotproduct += A[i] * B[i];
+    mA += A[i] * A[i];
+    mB += B[i] * B[i];
+  }
+  mA = Math.sqrt(mA);
+  mB = Math.sqrt(mB);
+  let similarity = dotproduct / (mA * mB); // here you needed extra brackets
+  return similarity;
+}
+
+// TASKS
+
 function extendTitles() {
   const lines = getAllNoteTitles();
-  console.log(lines.length);
 
   // shuffle the list
   const shuffled = lines.sort(() => 0.5 - Math.random());
@@ -50,17 +100,7 @@ function extendTitles() {
   Suggest 10 more titles that could appear in this author's notes.
   `;
 
-  console.log(query);
-  console.log("---");
   ask(query);
-}
-
-function processNote(note) {
-  const lines = note.split(/[\r\n]+/);
-  // remove all lines with a colon
-  const filtered = lines.filter((line) => !line.includes(":"));
-  // return joined list
-  return filtered.join("\n");
 }
 
 function rewordNote() {
@@ -82,8 +122,7 @@ function rewordNote() {
 
   Reword this note in the voice of Kanye West.
   `;
-  console.log(query);
-  console.log("---");
+
   ask(query);
 }
 
@@ -103,8 +142,6 @@ function howAreTheseRelated() {
     Write a haiku inspired by these titles.
    `;
 
-  console.log(query);
-  console.log("---");
   ask(query);
 }
 
@@ -127,8 +164,7 @@ function addSlashlinks() {
 
   Key terms in these notes appear in the form of slashlinks, e.g. /hello-world. Replace key terms with slashlinks in the above note.
   `;
-  console.log(query);
-  console.log("---");
+
   ask(query);
 }
 
@@ -158,8 +194,7 @@ function connect() {
 
   Extend the author's thinking by finding the connection between these ideas.
   `;
-  console.log(query);
-  console.log("---");
+
   ask(query);
 }
 
@@ -182,14 +217,13 @@ function extendNote() {
 
   Capture the ideas of this note in a single sentence poem.
   `;
-  console.log(query);
-  console.log("---");
+
   ask(query);
 }
 
 async function getEmbedding(text) {
   const res = await openai.createEmbedding({
-    model: "text-embedding-ada-002",
+    model: EMBEDDING_MODEL,
     input: text,
   });
 
@@ -197,50 +231,34 @@ async function getEmbedding(text) {
   return embedding;
 }
 
-function cosinesim(A, B) {
-  let dotproduct = 0;
-  let mA = 0;
-  let mB = 0;
-  for (let i = 0; i < A.length; i++) {
-    // here you missed the i++
-    dotproduct += A[i] * B[i];
-    mA += A[i] * A[i];
-    mB += B[i] * B[i];
-  }
-  mA = Math.sqrt(mA);
-  mB = Math.sqrt(mB);
-  let similarity = dotproduct / (mA * mB); // here you needed extra brackets
-  return similarity;
-}
-
 async function getEmbeddingForRandomNoteTitle() {
   // select random file in folder
   const files = getAllNoteFilenames();
   const randomFile = files[Math.floor(Math.random() * files.length)];
-  const processedName = randomFile.replace(".subtext", "").replace(/-/g, " ");
+  const processedName = formatName(randomFile);
 
   console.log(processedName);
   return await getEmbedding(processedName);
 }
 
-// const a = await getEmbeddingForRandomNoteTitle();
-// const b = await getEmbeddingForRandomNoteTitle();
-// console.log(cosinesim(a.embedding, b.embedding));
-
-async function getEmbeddings(max) {
-  let files = fs.readdirSync("./notes").filter((f) => f.endsWith(".subtext"));
+async function updateEmbeddingsIndex(max) {
+  let files = fs.readdirSync(NOTES_FOLDER).filter((f) => f.endsWith(SUFFIX));
   const cache = loadCachedEmbeddings();
 
   files = files.slice(0, max);
 
   for (let f of files) {
-    if (cache[f]) continue;
-
-    const processedName = f.replace(".subtext", "").replace(/-/g, " ");
+    const processedName = formatName(f);
     const text = fs.readFileSync(`./notes/${f}`, "utf-8");
     const note = processNote(text);
     const combined = `${processedName}\n\n${note}`;
-    console.log(combined);
+
+    // purge any short notes from cache
+    if (note.length < 5) {
+      delete cache[f];
+      continue;
+    }
+    if (cache[f]) continue;
 
     const embedding = await getEmbedding(combined);
 
@@ -250,18 +268,8 @@ async function getEmbeddings(max) {
   const json = JSON.stringify(cache);
   // save to disk
   console.log(json);
-  fs.writeFileSync("./embeddings.json", json);
+  fs.writeFileSync(EMBEDDINGS, json);
 }
-
-function loadCachedEmbeddings() {
-  try {
-    const data = fs.readFileSync("./embeddings.json");
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
-}
-
 async function findRelatedNotes(text, count = 10, threshold = 0.75) {
   const cache = loadCachedEmbeddings();
   const embedding = await getEmbedding(text);
@@ -281,7 +289,7 @@ async function findRelatedNotes(text, count = 10, threshold = 0.75) {
   return related;
 }
 
-// getEmbeddings(135);
+// updateEmbeddingsIndex(135);
 
 // get cli args
 const args = process.argv.slice(2);
